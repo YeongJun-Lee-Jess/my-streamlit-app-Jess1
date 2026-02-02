@@ -1,12 +1,15 @@
 # ============================================================
-# 👑 PickMeMovie — "Princess Edition"
-# 고풍 + 왕실 + 공주님 무드로 처음부터 UI를 새로 설계한 Streamlit 앱
-# - 질문 UI/카드 UI/결과 UI 전부 리디자인
-# - TMDB 연동 (사이드바 API Key 입력)
-# - 장르 분석 -> TMDB 인기 5편 -> 3열 카드 + expander 상세
-# - "누구랑 보면 좋은지" 포함
+# 👑 PickMeMovie — Princess Edition (Ultra Royal v2)
+# "공주 컨셉"을 더 진하게: 왕실 UI / 궁정 호칭 / 티아라 컬러 / 왕실 증서 / 의식(로딩) 연출
 #
-# ※ 실행: streamlit run app.py
+# ✅ 기능
+# - 5문항(고풍 카피) + 라디오(가로)
+# - 결과 보기 -> 장르 분석 -> TMDB 장르 인기 5편 -> 3열 카드 + expander 상세
+# - 포스터/제목/평점 표시
+# - "누구랑 보면 좋은지" + "왕실 추천 증서" + "궁정 팁" 추가
+# - Sidebar: API Key + 컨셉 커스터마이즈(호칭/티아라 컬러/연출 토글)
+#
+# 실행: streamlit run app.py
 # ============================================================
 
 import time
@@ -15,10 +18,9 @@ from typing import Dict, List, Tuple, Optional
 
 import streamlit as st
 
-# ============================================================
-# 1) Page Config
-# ============================================================
-
+# -----------------------------
+# Page Config
+# -----------------------------
 st.set_page_config(
     page_title="PickMeMovie — Princess Edition",
     page_icon="👑",
@@ -26,10 +28,9 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ============================================================
-# 2) Constants / TMDB
-# ============================================================
-
+# -----------------------------
+# TMDB 설정
+# -----------------------------
 TMDB_DISCOVER_URL = "https://api.themoviedb.org/3/discover/movie"
 TMDB_POSTER_BASE = "https://image.tmdb.org/t/p/w500"
 
@@ -42,328 +43,88 @@ GENRE_IDS = {
     "판타지": 14,
 }
 
-# ============================================================
-# 3) Princess-style Questions (완전 새로 문구 설계)
-#    - 선택지는 사용자가 준 4개를 유지하되
-#      문장을 훨씬 고풍스럽게 “표현”만 바꿈
-# ============================================================
-
-QUESTIONS: List[Tuple[str, List[str]]] = [
+# -----------------------------
+# Princess 질문(컨셉 강화)
+# - 선택지는 기존 그대로(요구사항 호환)
+# -----------------------------
+QUESTIONS: List[Tuple[str, List[str], str]] = [
     (
-        "Ⅰ. 궁정의 여유로운 주말, 전하께서는 어떤 시간을 가장 탐하시나이까?",
+        "Ⅰ. 주말이 허락된 날, 전하의 마음이 가장 끌리는 연회는?",
         ["집에서 휴식", "친구와 놀기", "새로운 곳 탐험", "혼자 취미생활"],
+        "한 가지를 고르시면 ‘오늘의 무드’가 정해지옵니다.",
     ),
     (
-        "Ⅱ. 마음에 구름이 드리울 때, 전하의 평온을 되찾는 의식은 무엇이옵니까?",
+        "Ⅱ. 근심이 스며들 때, 전하의 평정을 되찾는 ‘회복 의식’은?",
         ["혼자 있기", "수다 떨기", "운동하기", "맛있는 거 먹기"],
+        "가장 편안해지는 선택이 정답이옵니다.",
     ),
     (
-        "Ⅲ. 한 편의 영화가 ‘명작’으로 봉인되기 위한, 가장 중한 덕목은 무엇이라 여기시나이까?",
+        "Ⅲ. 한 편의 영화가 ‘명작’이 되기 위한, 가장 귀한 보석은?",
         ["감동 스토리", "시각적 영상미", "깊은 메시지", "웃는 재미"],
+        "전하가 중요하게 여기는 기준을 선택하옵소서.",
     ),
     (
-        "Ⅳ. 왕실의 여행길, 전하의 여정은 어떤 풍모를 띠나이까?",
+        "Ⅳ. 여행길에 오른 전하의 여정, 가장 닮은 풍모는?",
         ["계획적", "즉흥적", "액티비티", "힐링"],
+        "여정의 스타일은 영화 취향과 닮아 있사옵니다.",
     ),
     (
-        "Ⅴ. 벗들 사이에서 전하의 위엄(혹은 매력)이 빛나는 자리란?",
+        "Ⅴ. 벗들 사이에서 전하의 매력이 빛나는 포지션은?",
         ["듣는 역할", "주도하기", "분위기 메이커", "필요할 때 나타남"],
+        "궁정에서는 역할이 곧 분위기이옵니다.",
     ),
 ]
 
-# ============================================================
-# 4) Answer -> Genre Mapping
-# ============================================================
-
+# -----------------------------
+# 선택지 -> 장르 매핑
+# -----------------------------
 OPTION_TO_GENRE: Dict[str, str] = {
-    # Q1
     "집에서 휴식": "드라마",
     "친구와 놀기": "코미디",
     "새로운 곳 탐험": "액션",
     "혼자 취미생활": "판타지",
-    # Q2
     "혼자 있기": "드라마",
     "수다 떨기": "로맨스",
     "운동하기": "액션",
     "맛있는 거 먹기": "코미디",
-    # Q3
     "감동 스토리": "드라마",
     "시각적 영상미": "판타지",
     "깊은 메시지": "SF",
     "웃는 재미": "코미디",
-    # Q4
     "계획적": "드라마",
     "즉흥적": "로맨스",
     "액티비티": "액션",
     "힐링": "로맨스",
-    # Q5
     "듣는 역할": "드라마",
     "주도하기": "액션",
     "분위기 메이커": "코미디",
     "필요할 때 나타남": "SF",
 }
 
-# ============================================================
-# 5) “누구랑 보면 좋을까” (Princess tone)
-# ============================================================
-
+# -----------------------------
+# 장르별 “누구랑 보면 좋을까” (공주톤)
+# -----------------------------
 WATCH_WITH: Dict[str, str] = {
-    "드라마": "고요한 정서를 함께 음미할 **가까운 벗** 혹은 **편안히 곁을 내어줄 사람**과 함께하시길.",
-    "로맨스": "설렘을 나눌 **연인/썸**과 함께하면 황홀하옵니다. (홀로 보시면 감성의 왕관을 쓰게 되실지도.)",
-    "코미디": "웃음은 연회처럼 함께할수록 성대해집니다. **친구들/동아리/과 동기**와 함께하소서.",
-    "액션": "심장이 뛰는 장면에 함께 환호할 **열정의 동료**(액션 러버 친구/형제자매)와 보시길.",
-    "SF": "설정과 떡밥을 해석하며 담소 나눌 **덕질 동무** 혹은 **토론을 즐기는 벗**이 최상입니다.",
-    "판타지": "세계관에 흠뻑 젖을 **취향이 닮은 벗**과 좋고, 가끔은 **혼영**도 귀하옵니다.",
+    "드라마": "감정선을 함께 음미할 **가까운 벗** 혹은 **조용히 곁을 내어줄 사람**과 함께하시면 좋사옵니다.",
+    "로맨스": "설렘을 나눌 **연인/썸**과 함께하면 황홀하옵니다. (홀로 보시면 감성의 왕관을 쓰게 되실지도!)",
+    "코미디": "웃음은 연회처럼 함께할수록 성대해집니다. **친구들/동아리/과 동기**와 함께하소서!",
+    "액션": "심장 뛰는 장면에 함께 환호할 **열정의 동료**(액션 러버 친구/형제자매)와 보시길 권하옵니다.",
+    "SF": "설정·떡밥을 해석하며 담소 나눌 **덕질 동무** 혹은 **토론을 즐기는 벗**과 찰떡이옵니다.",
+    "판타지": "세계관에 진심인 **취향이 닮은 벗**과 좋고, 분위기를 타고 싶다면 **혼영**도 귀하옵니다.",
 }
 
-# ============================================================
-# 6) UI Copy (Royal tone)
-# ============================================================
+# -----------------------------
+# 참고/영감
+# -----------------------------
+INSPIRATIONS = [
+    ("넷플릭스(Netflix)", "개인화 추천 경험"),
+    ("왓챠(Watcha)", "평가 기반 취향 분석"),
+    ("IMDb", "평점/리뷰 중심 탐색"),
+]
 
-APP_NAME = "PickMeMovie"
-APP_SUBTITLE = "Princess Edition"
-APP_TAGLINE = "고민은 궁정 문지기에게 맡기고, 오늘의 영화는 전하의 취향에 맞게."
-APP_DESC = (
-    "다섯 가지 문답으로 전하의 ‘지금’ 무드를 가늠하고, "
-    "TMDB의 인기작 중 가장 어울리는 5편을 고풍스럽게 진상하옵니다."
-)
-
-# ============================================================
-# 7) Theme / CSS (공주님 + 고풍 + 왕실)
-# ============================================================
-
-st.markdown(
-    r"""
-<style>
-/* =========================
-   Princess Edition Theme
-   ========================= */
-
-/* Base layout */
-.block-container { padding-top: 2.2rem; padding-bottom: 3rem; max-width: 1400px; }
-
-/* Background – parchment + soft pink + gold glow */
-[data-testid="stAppViewContainer"] {
-  background:
-    radial-gradient(1200px 600px at 10% 10%, rgba(255, 205, 230, 0.18), transparent 55%),
-    radial-gradient(900px 600px at 90% 15%, rgba(255, 219, 120, 0.20), transparent 55%),
-    radial-gradient(1200px 700px at 50% 95%, rgba(188, 170, 255, 0.12), transparent 50%),
-    linear-gradient(180deg, rgba(255, 250, 245, 0.55), rgba(255, 245, 252, 0.40));
-}
-
-/* Sidebar background */
-section[data-testid="stSidebar"] > div {
-  background:
-    radial-gradient(700px 500px at 15% 10%, rgba(255, 219, 120, 0.25), transparent 55%),
-    linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0.30));
-  border-right: 1px solid rgba(120, 90, 20, 0.10);
-}
-
-/* Typography tweaks */
-html, body, [class*="css"]  {
-  font-family: ui-serif, "Georgia", "Times New Roman", serif !important;
-}
-
-/* Remove default Streamlit padding around some elements */
-div[data-testid="stVerticalBlock"] { gap: 1.05rem; }
-
-/* Hero card */
-.pm-hero {
-  border-radius: 26px;
-  padding: 1.35rem 1.6rem;
-  background:
-    linear-gradient(135deg, rgba(255,255,255,0.65), rgba(255,255,255,0.30));
-  border: 1px solid rgba(120, 90, 20, 0.14);
-  box-shadow: 0 22px 60px rgba(120, 50, 90, 0.18);
-  position: relative;
-  overflow: hidden;
-}
-.pm-hero:before {
-  content: "";
-  position: absolute;
-  inset: -2px;
-  background:
-    radial-gradient(800px 240px at 12% 12%, rgba(255, 219, 120, 0.26), transparent 55%),
-    radial-gradient(700px 260px at 88% 18%, rgba(255, 190, 230, 0.24), transparent 60%);
-  opacity: 0.85;
-  pointer-events: none;
-}
-.pm-hero-inner { position: relative; z-index: 1; }
-.pm-title {
-  font-size: 2.55rem;
-  font-weight: 900;
-  letter-spacing: -0.02em;
-  margin: 0;
-  color: rgba(65, 35, 55, 0.95);
-}
-.pm-subtitle {
-  margin: 0.35rem 0 0 0;
-  color: rgba(65, 35, 55, 0.72);
-  font-size: 1.05rem;
-}
-.pm-divider {
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(120, 90, 20, 0.28), transparent);
-  margin: 1.05rem 0 0.85rem 0;
-}
-
-/* Crown badge */
-.pm-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  padding: 0.3rem 0.75rem;
-  border-radius: 999px;
-  background: rgba(255, 219, 120, 0.20);
-  border: 1px solid rgba(120, 90, 20, 0.18);
-  font-weight: 900;
-  color: rgba(65, 35, 55, 0.90);
-}
-
-/* Question card */
-.pm-qcard {
-  border-radius: 20px;
-  padding: 1rem 1.1rem 0.9rem 1.1rem;
-  background: rgba(255,255,255,0.55);
-  border: 1px solid rgba(120, 90, 20, 0.14);
-  box-shadow: 0 16px 40px rgba(120, 50, 90, 0.10);
-}
-.pm-qtitle {
-  font-weight: 900;
-  font-size: 1.05rem;
-  color: rgba(65, 35, 55, 0.92);
-  margin-bottom: 0.5rem;
-}
-.pm-qhint {
-  font-size: 0.92rem;
-  color: rgba(65, 35, 55, 0.70);
-  margin-top: 0.45rem;
-}
-
-/* Radio area */
-div[role="radiogroup"] label {
-  background: rgba(255,255,255,0.60) !important;
-  border: 1px solid rgba(120, 90, 20, 0.14) !important;
-  border-radius: 999px !important;
-  padding: 0.15rem 0.5rem !important;
-  margin: 0.18rem 0.22rem 0.18rem 0 !important;
-}
-div[role="radiogroup"] label:hover {
-  border-color: rgba(120, 90, 20, 0.28) !important;
-}
-div[role="radiogroup"] label span {
-  color: rgba(65, 35, 55, 0.88) !important;
-  font-weight: 800 !important;
-}
-
-/* Buttons */
-.stButton > button {
-  border-radius: 999px !important;
-  padding: 0.78rem 1.05rem !important;
-  font-weight: 900 !important;
-  border: 1px solid rgba(120, 90, 20, 0.22) !important;
-  background: linear-gradient(135deg, rgba(255, 219, 120, 0.55), rgba(255, 190, 230, 0.40)) !important;
-  color: rgba(65, 35, 55, 0.92) !important;
-  box-shadow: 0 14px 32px rgba(120, 50, 90, 0.14);
-}
-.stButton > button:hover {
-  transform: translateY(-1px);
-  filter: brightness(1.03);
-}
-
-/* Result hero */
-.pm-result {
-  border-radius: 26px;
-  padding: 1.25rem 1.4rem;
-  background:
-    radial-gradient(900px 280px at 15% 20%, rgba(255, 219, 120, 0.28), transparent 60%),
-    radial-gradient(900px 280px at 85% 25%, rgba(255, 190, 230, 0.25), transparent 60%),
-    rgba(255,255,255,0.58);
-  border: 1px solid rgba(120, 90, 20, 0.18);
-  box-shadow: 0 24px 60px rgba(120, 50, 90, 0.16);
-}
-.pm-result-title {
-  margin: 0;
-  font-size: 2.15rem;
-  font-weight: 900;
-  letter-spacing: -0.02em;
-  color: rgba(65, 35, 55, 0.95);
-}
-.pm-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.28rem 0.8rem;
-  border-radius: 999px;
-  background: rgba(255, 219, 120, 0.22);
-  border: 1px solid rgba(120, 90, 20, 0.20);
-  font-weight: 900;
-}
-.pm-result-sub {
-  margin-top: 0.45rem;
-  color: rgba(65, 35, 55, 0.72);
-}
-
-/* Movie card */
-.pm-mcard {
-  border-radius: 20px;
-  padding: 0.85rem 0.85rem 0.55rem 0.85rem;
-  background: rgba(255,255,255,0.58);
-  border: 1px solid rgba(120, 90, 20, 0.14);
-  box-shadow: 0 14px 38px rgba(120, 50, 90, 0.12);
-  transition: transform 160ms ease, box-shadow 160ms ease, border 160ms ease;
-}
-.pm-mcard:hover {
-  transform: translateY(-3px);
-  border: 1px solid rgba(120, 90, 20, 0.24);
-  box-shadow: 0 18px 44px rgba(120, 50, 90, 0.16);
-}
-.pm-poster img {
-  border-radius: 16px !important;
-  border: 1px solid rgba(120, 90, 20, 0.12);
-}
-.pm-mtitle {
-  font-weight: 900;
-  color: rgba(65, 35, 55, 0.92);
-  font-size: 1.03rem;
-  margin-top: 0.55rem;
-  line-height: 1.25;
-}
-.pm-mmeta {
-  color: rgba(65, 35, 55, 0.70);
-  font-size: 0.92rem;
-  margin-top: 0.12rem;
-}
-
-/* Expander */
-div[data-testid="stExpander"] details {
-  border-radius: 16px;
-  border: 1px solid rgba(120, 90, 20, 0.14);
-  background: rgba(255,255,255,0.50);
-}
-
-/* Section headings */
-.pm-section {
-  font-size: 1.35rem;
-  font-weight: 900;
-  color: rgba(65, 35, 55, 0.92);
-  margin-top: 0.2rem;
-}
-
-/* Small helper text */
-.pm-caption {
-  color: rgba(65, 35, 55, 0.68);
-  font-size: 0.95rem;
-}
-</style>
-""",
-    unsafe_allow_html=True,
-)
-
-# ============================================================
-# 8) Helpers
-# ============================================================
-
+# -----------------------------
+# Helpers
+# -----------------------------
 def _safe_float(x) -> Optional[float]:
     try:
         return float(x)
@@ -372,9 +133,6 @@ def _safe_float(x) -> Optional[float]:
 
 
 def analyze_answers(answers: List[str]) -> Tuple[str, Dict[str, int], str]:
-    """
-    답변을 장르 점수로 환산해 1등 장르와 이유 텍스트 반환.
-    """
     scores = {g: 0 for g in GENRE_IDS.keys()}
     picked_by_genre = {g: [] for g in GENRE_IDS.keys()}
 
@@ -384,7 +142,7 @@ def analyze_answers(answers: List[str]) -> Tuple[str, Dict[str, int], str]:
             scores[g] += 1
             picked_by_genre[g].append(ans)
 
-    # 동점 우선순위(원하는대로 조정 가능)
+    # 동점 처리 우선순위(원하는 성향대로 조정 가능)
     priority = ["드라마", "로맨스", "코미디", "액션", "SF", "판타지"]
     top_score = max(scores.values()) if scores else 0
     candidates = [g for g, s in scores.items() if s == top_score] or ["드라마"]
@@ -393,7 +151,7 @@ def analyze_answers(answers: List[str]) -> Tuple[str, Dict[str, int], str]:
 
     examples = picked_by_genre[top_genre][:2]
     if examples:
-        reason = f"전하의 선택(예: {', '.join(examples)})은 **{top_genre}**의 품격을 가장 강하게 띠옵니다."
+        reason = f"전하의 선택(예: {', '.join(examples)})은 **{top_genre}**의 정취를 가장 강하게 띠옵니다."
     else:
         reason = f"문답의 전체 결을 살피건대, **{top_genre}**가 전하께 가장 어울리옵니다."
 
@@ -402,9 +160,6 @@ def analyze_answers(answers: List[str]) -> Tuple[str, Dict[str, int], str]:
 
 @st.cache_data(show_spinner=False, ttl=600)
 def fetch_movies(api_key: str, genre_id: int) -> List[dict]:
-    """
-    TMDB discover API로 장르별 인기 영화 목록 가져오기
-    """
     params = {
         "api_key": api_key,
         "with_genres": genre_id,
@@ -419,74 +174,345 @@ def fetch_movies(api_key: str, genre_id: int) -> List[dict]:
     return r.json().get("results", [])
 
 
-def build_reason(top_genre: str, user_reason: str) -> str:
-    return f"{user_reason} 그러므로 지금 이 순간, **{top_genre}**의 정취가 깃든 인기작을 진상하옵니다."
-
-
 def genre_blurb(genre: str) -> str:
-    """
-    장르를 고풍스럽게 소개
-    """
     blurbs = {
-        "드라마": "잔잔한 서사와 감정의 레이스가 궁정의 촛불처럼 은은히 타오릅니다.",
-        "로맨스": "설렘과 고백의 향이 장미처럼 번지는 밤, 마음이 먼저 왕관을 씁니다.",
-        "코미디": "연회장의 웃음처럼 유쾌한 순간이 이어져, 근심을 잠시 내려놓게 하옵니다.",
-        "액션": "검과 번개처럼 속도감 넘치는 전개가 피를 데우고, 눈을 떼지 못하게 하옵니다.",
-        "SF": "별의 지도와 미지의 문이 열리는 순간, 상상력은 왕실의 영토를 넘어섭니다.",
-        "판타지": "마법과 전설이 살아 숨쉬는 세계로—현실의 경계를 우아히 넘나듭니다.",
+        "드라마": "촛불처럼 은은한 서사와 감정의 레이스가 마음을 감쌉니다.",
+        "로맨스": "장미 향처럼 번지는 설렘—마음이 먼저 왕관을 씁니다.",
+        "코미디": "연회장의 웃음처럼 유쾌한 순간이 근심을 덜어줍니다.",
+        "액션": "검과 번개 같은 속도감—눈을 떼기 어렵사옵니다.",
+        "SF": "별의 지도와 미지의 문—상상력은 왕실의 영토를 넘어섭니다.",
+        "판타지": "마법과 전설의 왕국—현실의 경계를 우아히 넘나듭니다.",
     }
     return blurbs.get(genre, "전하께 어울리는 특별한 무드가 깃든 장르이옵니다.")
 
 
-def tiny_pause():
-    # 로딩이 너무 즉시 끝나면 느낌이 안 살아서 아주 살짝만
-    time.sleep(0.25)
+def build_reason(top_genre: str, user_reason: str) -> str:
+    return f"{user_reason} 그러므로 지금 이 순간, **{top_genre}**의 향을 품은 인기작을 진상하옵니다."
 
 
-# ============================================================
-# 9) Sidebar (Royal Cabinet)
-# ============================================================
+def ritual_spinner(text: str, seconds: float = 1.1):
+    """짧은 ‘의식’ 연출용(너무 길면 UX 안 좋으니 짧게)"""
+    with st.spinner(text):
+        time.sleep(seconds)
 
-with st.sidebar:
-    st.markdown("## 👑 왕실 서재")
+
+# -----------------------------
+# Session State
+# -----------------------------
+if "ran" not in st.session_state:
+    st.session_state.ran = False
+if "result" not in st.session_state:
+    st.session_state.result = None  # (top_genre, scores, reason, movies)
+if "persona_name" not in st.session_state:
+    st.session_state.persona_name = "전하"
+if "tiara" not in st.session_state:
+    st.session_state.tiara = "로즈골드"
+if "fx" not in st.session_state:
+    st.session_state.fx = True
+
+# -----------------------------
+# Ultra Royal CSS (공주 컨셉 더 강화)
+# -----------------------------
+def inject_css(tiara: str):
+    # 티아라 컬러 프리셋
+    tiara_map = {
+        "로즈골드": ("rgba(255, 182, 193, 0.35)", "rgba(255, 215, 160, 0.40)", "rgba(120, 70, 95, 0.90)"),
+        "샴페인골드": ("rgba(255, 240, 200, 0.45)", "rgba(255, 215, 120, 0.40)", "rgba(85, 55, 20, 0.92)"),
+        "라일락": ("rgba(210, 190, 255, 0.35)", "rgba(255, 200, 230, 0.25)", "rgba(70, 40, 85, 0.92)"),
+        "민트펄": ("rgba(170, 255, 230, 0.28)", "rgba(255, 230, 200, 0.25)", "rgba(30, 70, 65, 0.92)"),
+    }
+    g1, g2, ink = tiara_map.get(tiara, tiara_map["로즈골드"])
+
     st.markdown(
-        "<div class='pm-caption'>전하의 영화 추천을 위해 필요한 열쇠를 보관하는 곳이옵니다.</div>",
+        f"""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Playfair+Display:wght@600;700;800&display=swap');
+
+.block-container {{
+  padding-top: 2.3rem;
+  padding-bottom: 3.5rem;
+  max-width: 1450px;
+}}
+
+html, body, [class*="css"] {{
+  font-family: "Playfair Display", ui-serif, Georgia, serif !important;
+}}
+
+[data-testid="stAppViewContainer"] {{
+  background:
+    radial-gradient(1200px 650px at 12% 10%, {g1}, transparent 58%),
+    radial-gradient(1000px 650px at 90% 15%, {g2}, transparent 58%),
+    radial-gradient(1200px 700px at 50% 95%, rgba(190, 170, 255, 0.14), transparent 52%),
+    linear-gradient(180deg, rgba(255, 250, 245, 0.62), rgba(255, 245, 252, 0.42));
+}}
+
+section[data-testid="stSidebar"] > div {{
+  background:
+    radial-gradient(700px 520px at 12% 12%, rgba(255, 215, 120, 0.22), transparent 58%),
+    linear-gradient(180deg, rgba(255,255,255,0.62), rgba(255,255,255,0.30));
+  border-right: 1px solid rgba(120, 90, 20, 0.10);
+}}
+
+.pm-hero {{
+  border-radius: 28px;
+  padding: 1.5rem 1.75rem;
+  background: linear-gradient(135deg, rgba(255,255,255,0.72), rgba(255,255,255,0.30));
+  border: 1px solid rgba(140, 95, 30, 0.16);
+  box-shadow: 0 26px 70px rgba(120, 50, 90, 0.18);
+  position: relative;
+  overflow: hidden;
+}}
+
+.pm-hero:before {{
+  content: "";
+  position: absolute;
+  inset: -2px;
+  background:
+    radial-gradient(900px 280px at 10% eth, rgba(255, 219, 120, 0.30), transparent 62%),
+    radial-gradient(900px 320px at 92% 18%, rgba(255, 190, 230, 0.26), transparent 65%),
+    radial-gradient(1200px 400px at 50% 110%, rgba(190, 170, 255, 0.18), transparent 58%);
+  opacity: 0.95;
+  pointer-events: none;
+}}
+
+.pm-hero-inner {{ position: relative; z-index: 1; }}
+
+.pm-badge {{
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .34rem .85rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.60);
+  border: 1px solid rgba(140, 95, 30, 0.16);
+  color: {ink};
+  font-weight: 900;
+  font-family: "Cinzel", "Playfair Display", serif !important;
+}}
+
+.pm-title {{
+  margin: .75rem 0 0 0;
+  font-size: 2.65rem;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: {ink};
+  line-height: 1.16;
+}}
+
+.pm-sub {{
+  margin: .45rem 0 0 0;
+  color: rgba(0,0,0,0.55);
+  font-size: 1.05rem;
+}}
+
+.pm-line {{
+  height: 1px;
+  margin: 1rem 0 .9rem 0;
+  background: linear-gradient(90deg, transparent, rgba(140,95,30,0.32), transparent);
+}}
+
+.pm-section {{
+  font-family: "Cinzel", "Playfair Display", serif !important;
+  font-size: 1.38rem;
+  font-weight: 900;
+  color: {ink};
+}}
+
+.pm-caption {{
+  color: rgba(0,0,0,0.55);
+  font-size: 0.96rem;
+}}
+
+.pm-qcard {{
+  border-radius: 22px;
+  padding: 1.05rem 1.15rem;
+  background: rgba(255,255,255,0.62);
+  border: 1px solid rgba(140,95,30,0.14);
+  box-shadow: 0 16px 46px rgba(120, 50, 90, 0.10);
+}}
+
+.pm-qtitle {{
+  font-weight: 900;
+  color: {ink};
+  font-size: 1.06rem;
+  margin-bottom: .6rem;
+}}
+
+.pm-qhint {{
+  margin-top: .55rem;
+  color: rgba(0,0,0,0.52);
+  font-size: .92rem;
+}}
+
+div[role="radiogroup"] label {{
+  background: rgba(255,255,255,0.66) !important;
+  border: 1px solid rgba(140,95,30,0.14) !important;
+  border-radius: 999px !important;
+  padding: .14rem .55rem !important;
+  margin: .18rem .22rem .18rem 0 !important;
+}}
+div[role="radiogroup"] label span {{
+  color: rgba(0,0,0,0.66) !important;
+  font-weight: 900 !important;
+}}
+div[role="radiogroup"] label:hover {{
+  border-color: rgba(140,95,30,0.30) !important;
+}}
+
+.stButton > button {{
+  border-radius: 999px !important;
+  padding: .80rem 1.05rem !important;
+  font-weight: 900 !important;
+  border: 1px solid rgba(140,95,30,0.22) !important;
+  background: linear-gradient(135deg, {g2}, {g1}) !important;
+  color: {ink} !important;
+  box-shadow: 0 14px 34px rgba(120, 50, 90, 0.14);
+}}
+.stButton > button:hover {{
+  transform: translateY(-1px);
+  filter: brightness(1.02);
+}}
+
+.pm-result {{
+  border-radius: 28px;
+  padding: 1.35rem 1.55rem;
+  background:
+    radial-gradient(1000px 320px at 14% 25%, rgba(255, 219, 120, 0.30), transparent 62%),
+    radial-gradient(1000px 320px at 88% 25%, rgba(255, 190, 230, 0.26), transparent 62%),
+    rgba(255,255,255,0.66);
+  border: 1px solid rgba(140,95,30,0.18);
+  box-shadow: 0 26px 70px rgba(120, 50, 90, 0.16);
+}}
+.pm-result-title {{
+  margin: 0;
+  font-size: 2.18rem;
+  font-weight: 900;
+  color: {ink};
+}}
+.pm-pill {{
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  padding: .28rem .86rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(140,95,30,0.18);
+  font-weight: 900;
+}}
+.pm-result-sub {{
+  margin-top: .45rem;
+  color: rgba(0,0,0,0.55);
+  font-size: 1.0rem;
+}}
+
+.pm-mcard {{
+  border-radius: 22px;
+  padding: .88rem .88rem .55rem .88rem;
+  background: rgba(255,255,255,0.64);
+  border: 1px solid rgba(140,95,30,0.14);
+  box-shadow: 0 16px 46px rgba(120, 50, 90, 0.12);
+  transition: transform 160ms ease, box-shadow 160ms ease, border 160ms ease;
+}}
+.pm-mcard:hover {{
+  transform: translateY(-3px);
+  border-color: rgba(140,95,30,0.28);
+  box-shadow: 0 20px 54px rgba(120, 50, 90, 0.16);
+}}
+.pm-poster img {{
+  border-radius: 18px !important;
+  border: 1px solid rgba(140,95,30,0.12);
+}}
+.pm-mtitle {{
+  font-weight: 900;
+  color: {ink};
+  font-size: 1.03rem;
+  margin-top: .55rem;
+  line-height: 1.25;
+}}
+.pm-mmeta {{
+  color: rgba(0,0,0,0.55);
+  font-size: .92rem;
+  margin-top: .12rem;
+}}
+
+div[data-testid="stExpander"] details {{
+  border-radius: 18px;
+  border: 1px solid rgba(140,95,30,0.14);
+  background: rgba(255,255,255,0.56);
+}}
+
+.pm-certificate {{
+  border-radius: 24px;
+  padding: 1.1rem 1.2rem;
+  background: linear-gradient(135deg, rgba(255,255,255,0.70), rgba(255,255,255,0.38));
+  border: 1px dashed rgba(140,95,30,0.26);
+  box-shadow: 0 14px 40px rgba(120,50,90,0.10);
+}}
+.pm-cert-title {{
+  font-family: "Cinzel", serif !important;
+  font-weight: 900;
+  font-size: 1.2rem;
+  color: {ink};
+  margin: 0 0 .35rem 0;
+}}
+.pm-cert-body {{
+  color: rgba(0,0,0,0.58);
+  font-size: .98rem;
+  margin: 0;
+}}
+</style>
+""",
         unsafe_allow_html=True,
     )
+
+
+inject_css(st.session_state.tiara)
+
+# ============================================================
+# Sidebar (왕실 커스터마이즈)
+# ============================================================
+with st.sidebar:
+    st.markdown("## 👑 왕실 서재 (Royal Cabinet)")
+    st.markdown("<div class='pm-caption'>전하의 영화 추천을 위한 설정을 보관하옵니다.</div>", unsafe_allow_html=True)
     st.markdown("---")
 
+    # 사용자 이름 / 호칭
+    st.markdown("### 🪞 궁정 호칭")
+    persona = st.text_input("이름(호칭)", value=st.session_state.persona_name, help="예: 이영준 전하, 공주님, 황태자 등")
+    st.session_state.persona_name = persona.strip() if persona.strip() else "전하"
+
+    # 티아라 컬러
+    st.markdown("### 💎 티아라 색상")
+    tiara = st.selectbox("원하시는 티아라를 고르시옵소서", ["로즈골드", "샴페인골드", "라일락", "민트펄"], index=["로즈골드","샴페인골드","라일락","민트펄"].index(st.session_state.tiara))
+    if tiara != st.session_state.tiara:
+        st.session_state.tiara = tiara
+        st.rerun()
+
+    # 연출 효과
+    st.markdown("### ✨ 궁정 연출")
+    st.session_state.fx = st.toggle("결과 발표 연출(반짝이)", value=st.session_state.fx)
+
+    st.markdown("---")
     st.markdown("### 🔑 TMDB 비밀 열쇠")
-    api_key = st.text_input("API Key", type="password", placeholder="여기에 TMDB API Key를 입력하옵소서")
-    st.caption("열쇠는 저장되지 않으며, 현재 세션에서만 쓰입니다.")
+    api_key = st.text_input("TMDB API Key", type="password", placeholder="여기에 TMDB API Key를 입력하옵소서")
+    st.caption("열쇠는 저장되지 않으며, 현재 세션에서만 사용됩니다.")
 
     st.markdown("---")
     st.markdown("### 💡 참고/영감 (왕실 기록)")
-    st.markdown(
-        "- **넷플릭스(Netflix)**: 개인화 추천 경험\n"
-        "- **왓챠(Watcha)**: 평가 기반 취향 분석\n"
-        "- **IMDb**: 평점/리뷰 중심 탐색"
-    )
-
-    st.markdown("---")
-    st.markdown("### 🕊️ 안내")
-    st.markdown(
-        "<div class='pm-caption'>이 앱은 장르 기반 추천(인기순)입니다. "
-        "다음 단계에서 OpenAI를 연결하면 ‘추천 이유’가 더 정교해집니다.</div>",
-        unsafe_allow_html=True,
-    )
+    for name, why in INSPIRATIONS:
+        st.markdown(f"- **{name}**: {why}")
 
 # ============================================================
-# 10) Main — Hero
+# Main Hero
 # ============================================================
-
 st.markdown(
     f"""
 <div class="pm-hero">
   <div class="pm-hero-inner">
-    <div class="pm-badge">👑 {APP_NAME} · {APP_SUBTITLE}</div>
-    <div class="pm-divider"></div>
-    <h1 class="pm-title">{APP_TAGLINE}</h1>
-    <p class="pm-subtitle">{APP_DESC}</p>
+    <div class="pm-badge">👑 PickMeMovie · Princess Edition</div>
+    <div class="pm-line"></div>
+    <div class="pm-title">어서 오시옵소서, {st.session_state.persona_name} ✨</div>
+    <div class="pm-sub">다섯 가지 문답으로 전하의 ‘지금’ 무드를 가늠하고, TMDB 인기작 중 어울리는 5편을 진상하옵니다.</div>
   </div>
 </div>
 """,
@@ -494,30 +520,25 @@ st.markdown(
 )
 
 st.write("")
-st.markdown(
-    "<div class='pm-section'>📜 궁정 문답 (5문항)</div>",
-    unsafe_allow_html=True,
-)
-st.markdown(
-    "<div class='pm-caption'>가장 마음이 가는 선택지 하나만 고르시면 되옵니다.</div>",
-    unsafe_allow_html=True,
-)
+st.markdown("<div class='pm-section'>📜 궁정 문답 (5문항)</div>", unsafe_allow_html=True)
+st.markdown("<div class='pm-caption'>가장 마음이 가는 선택 하나를 고르시면 되옵니다.</div>", unsafe_allow_html=True)
 
 # ============================================================
-# 11) Questions — Two-column layout (더 왕실스럽게)
+# Questions Layout (2열 배치 + 마지막은 전체폭)
 # ============================================================
-
 answers: List[str] = []
 
-left, right = st.columns([1, 1], gap="large")
-question_cols = [left, right, left, right, left]  # 5개 배치
+row1 = st.columns(2, gap="large")
+row2 = st.columns(2, gap="large")
+row3 = st.columns(1, gap="large")
 
-for i, (q, opts) in enumerate(QUESTIONS, start=1):
-    with question_cols[i - 1]:
-        st.markdown(f"<div class='pm-qcard'>", unsafe_allow_html=True)
+placements = [row1[0], row1[1], row2[0], row2[1], row3[0]]
+
+for i, (q, opts, hint) in enumerate(QUESTIONS, start=1):
+    with placements[i - 1]:
+        st.markdown("<div class='pm-qcard'>", unsafe_allow_html=True)
         st.markdown(f"<div class='pm-qtitle'>{q}</div>", unsafe_allow_html=True)
 
-        # 라디오를 좀 더 “공주님 감성”으로: 가로 배치
         choice = st.radio(
             label="",
             options=opts,
@@ -526,54 +547,68 @@ for i, (q, opts) in enumerate(QUESTIONS, start=1):
             label_visibility="collapsed",
         )
 
-        st.markdown(
-            "<div class='pm-qhint'>✨ 전하의 선택은 곧 무드의 왕관이 되옵니다.</div>",
-            unsafe_allow_html=True,
-        )
+        st.markdown(f"<div class='pm-qhint'>✨ {hint}</div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
         answers.append(choice)
 
+# ============================================================
+# CTA Buttons
+# ============================================================
 st.write("")
-c1, c2, c3, c4 = st.columns([1.2, 1.2, 1.2, 2.4], gap="large")
+c1, c2, c3 = st.columns([1.2, 1.2, 2.6], gap="large")
 with c1:
     run_btn = st.button("👑 결과를 진상하라", type="primary", use_container_width=True)
 with c2:
-    st.button("🔄 다시 고르기", use_container_width=True)
+    if st.button("🔄 선택 초기화", use_container_width=True):
+        for i in range(1, 6):
+            if f"q{i}" in st.session_state:
+                del st.session_state[f"q{i}"]
+        st.session_state.ran = False
+        st.session_state.result = None
+        st.rerun()
 with c3:
-    st.button("💾 (다음) 결과 저장", use_container_width=True, disabled=True)
-with c4:
     st.markdown(
-        "<div class='pm-caption'>※ 저장 기능은 ‘다음 단계’에서 구현 예정(세션/DB).</div>",
+        "<div class='pm-caption'>Tip: 다음 단계에서 OpenAI를 붙이면 영화별 추천 이유를 ‘개인 취향 + 상황’으로 더 정교하게 만들 수 있사옵니다.</div>",
         unsafe_allow_html=True,
     )
 
 # ============================================================
-# 12) Result Section
+# Result
 # ============================================================
-
 if run_btn:
     if not api_key.strip():
         st.error("왕실 서재(사이드바)에 TMDB 비밀 열쇠(API Key)를 먼저 입력하옵소서.")
         st.stop()
 
-    with st.spinner("👑 전하의 취향을 분석 중이옵니다... (왕실 추천서를 작성하는 중)"):
-        tiny_pause()
-        top_genre, scores, user_reason = analyze_answers(answers)
-        genre_id = GENRE_IDS[top_genre]
+    # 의식(로딩 연출)
+    ritual_spinner("👑 왕실 기록관이 전하의 취향을 판독 중이옵니다...", 0.75)
+    top_genre, scores, user_reason = analyze_answers(answers)
 
-        try:
-            movies = fetch_movies(api_key.strip(), genre_id)
-        except requests.HTTPError:
-            st.error("TMDB 요청이 실패하였습니다. 열쇠(API Key)가 올바른지 확인하옵소서.")
-            st.stop()
-        except requests.RequestException:
-            st.error("네트워크가 불안정하옵니다. 잠시 후 다시 시도하옵소서.")
-            st.stop()
+    ritual_spinner("📜 TMDB 도서관에서 인기작을 수배하는 중이옵니다...", 0.55)
+    genre_id = GENRE_IDS[top_genre]
+    try:
+        movies = fetch_movies(api_key.strip(), genre_id)
+    except requests.HTTPError:
+        st.error("TMDB 요청이 실패하였습니다. 열쇠(API Key)가 올바른지 확인하옵소서.")
+        st.stop()
+    except requests.RequestException:
+        st.error("네트워크가 불안정하옵니다. 잠시 후 다시 시도하옵소서.")
+        st.stop()
 
-        tiny_pause()
+    st.session_state.ran = True
+    st.session_state.result = (top_genre, scores, user_reason, movies)
 
+# ============================================================
+# Render Stored Result (새로고침해도 유지)
+# ============================================================
+if st.session_state.ran and st.session_state.result:
+    top_genre, scores, user_reason, movies = st.session_state.result
     watch_with_text = WATCH_WITH.get(top_genre, "취향이 맞는 벗과 함께 보시면 더 즐거우리다.")
     blurb = genre_blurb(top_genre)
+
+    if st.session_state.fx:
+        # 공주 컨셉 연출: st.balloons는 귀엽지만 “왕실 발표” 느낌으로 사용
+        st.balloons()
 
     st.write("")
     st.markdown(
@@ -581,21 +616,29 @@ if run_btn:
 <div class="pm-result">
   <h2 class="pm-result-title">당신에게 딱인 장르는: <span class="pm-pill">👑 {top_genre}</span>!</h2>
   <div class="pm-result-sub">{blurb}</div>
-  <div class="pm-result-sub" style="margin-top:0.45rem;">{user_reason}</div>
+  <div class="pm-result-sub" style="margin-top:.45rem;">{user_reason}</div>
 </div>
 """,
         unsafe_allow_html=True,
     )
 
     st.write("")
-    info_left, info_right = st.columns([1.25, 1.85], gap="large")
-    with info_left:
-        st.success(f"👥 **누구와 함께 보시면 좋을까요?**\n\n{watch_with_text}")
-    with info_right:
-        st.info(
-            "📌 **추천 기준**\n\n"
-            "TMDB의 장르 기반 인기작을 가져오며, 전하의 선택을 통해 가장 어울리는 장르를 결정하옵니다.\n\n"
-            "다음 단계에서 OpenAI를 연결하면 영화별 추천 이유를 더 섬세하게 생성할 수 있사옵니다."
+    left, right = st.columns([1.25, 1.85], gap="large")
+    with left:
+        st.success(f"👥 **누구랑 보면 좋을까요?**\n\n{watch_with_text}")
+    with right:
+        st.markdown(
+            f"""
+<div class="pm-certificate">
+  <p class="pm-cert-title">🏰 왕실 추천 증서 (Royal Recommendation)</p>
+  <p class="pm-cert-body">
+    본 증서는 <b>{st.session_state.persona_name}</b>께서 오늘 선택하신 문답을 바탕으로,
+    <b>{top_genre}</b> 장르의 정취가 가장 어울림을 인증하옵니다.
+    아래 5편은 TMDB 인기 순으로 선별되었사옵니다.
+  </p>
+</div>
+""",
+            unsafe_allow_html=True,
         )
 
     if not movies:
@@ -604,13 +647,9 @@ if run_btn:
 
     st.write("")
     st.markdown("<div class='pm-section'>🍿 왕실 추천 영화 5선</div>", unsafe_allow_html=True)
-    st.markdown(
-        "<div class='pm-caption'>아래의 카드를 열어 줄거리와 추천 이유를 확인하옵소서.</div>",
-        unsafe_allow_html=True,
-    )
+    st.markdown("<div class='pm-caption'>카드를 펼쳐 줄거리와 추천 이유를 확인하옵소서.</div>", unsafe_allow_html=True)
     st.write("")
 
-    # 3열 카드
     cols = st.columns(3, gap="large")
     top5 = movies[:5]
 
@@ -647,8 +686,11 @@ if run_btn:
                 st.markdown("**누구와 함께 보면 더 좋을까요?**")
                 st.write(watch_with_text)
 
+                st.markdown("**궁정 한 마디**")
+                st.write(f"전하, 오늘은 **{top_genre}**의 무드로 마음의 왕관을 반짝이게 하시옵소서 ✨")
+
             st.markdown("</div>", unsafe_allow_html=True)
 
-    # Debug / Score
+    # 점수표(원하면 숨김)
     with st.expander("🧾 (선택) 장르 점수표 열람"):
         st.json(scores)
